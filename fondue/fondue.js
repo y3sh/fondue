@@ -1,35 +1,10 @@
-/*
- * Copyright (c) 2012 Massachusetts Institute of Technology, Adobe Systems
- * Incorporated, and other contributors. All rights reserved.
- *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
- * DEALINGS IN THE SOFTWARE.
- *
- */
-
 var basename = require('path').basename;
-var falafel = require('falafel');
-var falafelMap = require('falafel-map');
-var eselector = require('../esprima-selector');
-var helpers = require('../falafel-helpers');
 var fs = require('fs');
-var beautify_js = require('js-beautify');
-var UglifyJS = require('uglify-js');
+var falafel = require('falafel');
+var eselector = require('./esprima-selector');
+var helpers = require('./falafel-helpers');
+var tracerSource = /*tracer.js{*/fs.readFileSync(__dirname + '/tracer.js', 'utf8')/*}tracer.js*/;
+var util = require("../util/util");
 
 // adds keys from options to defaultOptions, overwriting on conflicts & returning defaultOptions
 function mergeInto(options, defaultOptions) {
@@ -57,7 +32,7 @@ function makeId(type, path, loc) {
 	     + loc.start.column + '-'
 	     + loc.end.line + '-'
 	     + loc.end.column;
-};
+}
 
 function instrumentationPrefix(options) {
 	options = mergeInto(options, {
@@ -68,10 +43,9 @@ function instrumentationPrefix(options) {
 
 	// the inline comments below are markers for building the browser version of
 	// fondue, where the file contents will be inlined as a string.
-	var tracerSource = /*tracer.js{*/fs.readFileSync(__dirname + '/tracer.js', 'utf8')/*}tracer.js*/;
 	return template(tracerSource, {
 		name: options.name,
-		version: JSON.stringify(require('./package.json').version),
+		version: JSON.stringify(require('../package.json').version),
 		nodejs: options.nodejs,
 		maxInvocationsPerTick: options.maxInvocationsPerTick,
 	});
@@ -391,57 +365,7 @@ function instrument(src, options) {
 	});
 
 	var prefix = '', shebang = '', output, m;
-
-	try {
-		src = UglifyJS.minify(src, {
-			fromString: true,
-			warnings: true,
-			mangle: false,
-			compress: {
-				sequences: false,  // join consecutive statemets with the “comma operator”
-				properties: false,  // optimize property access: a["foo"] → a.foo
-				dead_code: false,  // discard unreachable code
-				drop_debugger: false,  // discard “debugger” statements
-				unsafe: false, // some unsafe optimizations (see below)
-				conditionals: false,  // optimize if-s and conditional expressions
-				comparisons: false,  // optimize comparisons
-				evaluate: false,  // evaluate constant expressions
-				booleans: false,  // optimize boolean expressions
-				loops: false,  // optimize loops
-				unused: false,  // drop unused variables/functions
-				hoist_funs: false,  // hoist function declarations
-				hoist_vars: false, // hoist variable declarations
-				if_return: false,  // optimize if-s followed by return/continue
-				join_vars: false,  // join var declarations
-				cascade: false,  // try to cascade `right` into `left` in sequences
-				side_effects: false,  // drop side-effect-free statements
-				warnings: true,  // warn about potentially dangerous optimizations/code
-				global_defs: {}     // global definitions
-			},
-			output: {
-				indent_start: 0,
-				indent_level: 2,
-				quote_keys: false,
-				space_colon: true,
-				ascii_only: false,
-				unescape_regexps: false,
-				inline_script: false,
-				width: 120,
-				max_line_len: 32000,
-				beautify: true,
-				source_map: null,
-				bracketize: false,
-				semicolons: false,
-				comments: true,
-				preserve_line: false,
-				screw_ie8: false,
-				preamble: null,
-				quote_style: 0
-			}
-		}).code;
-	} catch (ignored) {
-		console.log(options.path + ": Parse Error, No Trace Installed.")
-	}
+	src = util.beautifyJS(src, options.path);
 
   if (options.noTheseus || options.path.indexOf("theseus=no") > -1) {
     return src;
@@ -456,7 +380,7 @@ function instrument(src, options) {
 		prefix += instrumentationPrefix({
 			name: options.tracer_name,
 			nodejs: options.nodejs,
-			maxInvocationsPerTick: options.maxInvocationsPerTick,
+			maxInvocationsPerTick: options.maxInvocationsPerTick
 		});
 	}
 
@@ -474,12 +398,12 @@ function instrument(src, options) {
 			tracer_name: options.tracer_name,
 			sourceFilename: options.sourceFilename,
 			generatedFilename: options.generatedFilename,
-			throw_parse_errors: options.throw_parse_errors,
+			throw_parse_errors: options.throw_parse_errors
 		});
 		var oldToString = m.toString;
 		m.toString = function () {
 			return shebang + oldToString();
-		}
+		};
 		return m;
 	}
 
@@ -488,5 +412,5 @@ function instrument(src, options) {
 
 module.exports = {
 	instrument: instrument,
-	instrumentationPrefix: instrumentationPrefix,
+	instrumentationPrefix: instrumentationPrefix
 };
